@@ -1,54 +1,55 @@
-from flask.views import MethodView
 from flask import request
 from uuid import uuid4
-
+from flask.views import MethodView
+from flask_smorest import abort
 from . import bp
 from db import users
 
 from schemas import UserSchema
+from models.user_model import UserModel
+# user routes
 
 @bp.route('/user/<user_id>')
-class UserView(MethodView):
-    @bp.response(200, UserSchema(many=True))
-    def get(self):
-        return { 'users': list(users.values()) }, 200
+class User(MethodView):
 
-    @bp.response(200, UserSchema)
-    def get_user(self, user_id):
-        try:
-            return { 'user': users[user_id] } 
-        except KeyError:
-            return {'message': 'Invalid user'}, 400
+  @bp.response(200, UserSchema)
+  def get(self,user_id):
+    user = UserModel.query.get(user_id)
+    if user:
+      return user
+    else:
+      abort(400, message='User not found')
+    
+  @bp.arguments(UserSchema)
+  def put(self, user_data, user_id):
+    user = UserModel.query.get(user_id)
+    if user:
+      user.from_dict(user_data)
+      user.commit()
+      return { 'message': f'{user.username} updated'}, 202
+    abort(400, message = "Invalid User")
 
-    @bp.arguments(UserSchema)
-    def post(self, user_data):
-        user_id = uuid4()
-        users[user_id] = user_data
-        return { 'message': f'{user_data["username"]} created' }, 201
+  def delete(self, user_id):
+    user = UserModel.query.get(user_id)
+    if user:
+      user.delete()
+      return { 'message': f'User: {user.username} Deleted' }, 202
+    return {'message': "Invalid username"}, 400
 
-    def put(self, user_id):
-        try:
-            user = users[user_id]
-            user |= user_data
-            return { 'message': f'{user["username"]} updated'}, 202
-        except KeyError:
-            return {'message': "Invalid User"}, 400
-
-    def delete(self, user_id):
-        try:
-            del users[user_id]
-            return { 'message': f'User Deleted' }, 202
-        except KeyError:
-            return {'message': "Invalid username"}, 400
-                        
 @bp.route('/user')
 class UserList(MethodView):
 
-    @bp.response(200, UserSchema(many=True))
-    def get(self):
-        return list(users.values())
+  @bp.response(200, UserSchema(many = True))
+  def get(self):
+   return UserModel.query.all()
   
-    @bp.arguments(UserSchema)
-    def post(self, user_data):
-        users[uuid4()] = user_data
-        return { 'message' : f'{user_data["username"]} created' }, 201
+  @bp.arguments(UserSchema)
+  def post(self, user_data):
+    try: 
+      user = UserModel()
+      user.from_dict(user_data)
+      user.commit()
+      return { 'message' : f'{user_data["username"]} created' }, 201
+    except:
+      abort(400, message='Username and Email Already taken')
+    
